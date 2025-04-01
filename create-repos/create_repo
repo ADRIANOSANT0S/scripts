@@ -1,0 +1,106 @@
+#!/bin/bash
+
+# This script creates a new repository on GitHub and initializes it locally.
+
+check_github_login() {
+  gh auth status > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "You are not logged in to GitHub CLI. Please log in first."
+    echo "Run 'gh auth login' to log in."
+    exit 1
+  fi
+}
+
+check_github_account() {
+  echo "Do you want to change the GitHub account? (y/n)"
+  read -r change_account
+
+  if [ "$change_account" == "y" ]; then
+    echo "Signing out from the current GitHub account..."
+    gh auth logout
+    echo "Log in to the new GitHub account..."
+    gh auth login
+    if [ $? -ne 0 ]; then
+      echo "Failed to log in to the new GitHub account."
+      exit 1
+    fi
+    echo "Successfully logged in to the new GitHub account."
+  fi
+}
+
+# Check if `jq` is installed
+if ! command -v jq &> /dev/null; then
+  echo "The 'jq' package is required but not installed."
+  echo "Please install it and run the script again."
+  exit 1
+fi
+
+# Ask the repository visibility
+echo "Choose the visibility of the repository: ('public' as default or 'private')"
+read repository_visibility
+
+if [[ "$repository_visibility" != "public" && "$repository_visibility" != "private" ]]; then
+  echo "Invalid repository visibility. The repository will be created as public."
+  repository_visibility="public"
+fi
+
+# Check if the user is logged in to GitHub CLI
+check_github_login
+
+# Check if the user wants to change the GitHub account
+check_github_account
+
+# Get the GitHub username
+username=$(gh api user | jq -r .login)
+
+echo "If your remote repository has a prefix (e.g. 'github.com-prefixname/repo-name/repo-name.git'), enter it now:"
+read prefix_remoto
+
+# If the prefix is empty, set the default prefix
+if [ -z "$prefix_remoto" ]; then
+  prefix_remoto=""
+fi
+
+# Check if Git user is configured
+if ! git config --global user.name > /dev/null || ! git config --global user.email > /dev/null; then
+  echo "Git user is not configured. Let's set it up."
+  read -p "Enter your Git username: " git_username
+  git config --global user.name "$git_username"
+
+  read -p "Enter your Git email: " git_email
+  git config --global user.email "$git_email"
+fi
+
+# Ask for the repository name
+echo "Enter the name of the repository:"
+read repository_name
+
+# Check if the directory exists
+if [ -d "$repository_name" ]; then
+  echo "The directory '$repository_name' already exists. Do you want to overwrite it? (y/n)"
+  read -r overwrite
+  if [ "$overwrite" != "y" ]; then
+    echo "Exiting without creating the repository."
+    exit 1
+  fi
+  rm -rf "$repository_name"
+fi
+
+# Create the remote repository on GitHub
+gh repo create "$repository_name" --"$repository_visibility"
+
+# Create the local folder and initialize Git
+mkdir "$repository_name"
+cd "$repository_name" || exit
+git init
+touch README.md
+git add .
+git commit -m "Initial commit"
+
+# Add remote repository
+git remote add origin "https://github.com$prefix_remoto/$username/$repository_name.git"
+
+# Push the local repository to GitHub
+git branch -M main
+git push -u origin main
+echo "Repository $repository_name created and pushed to GitHub."
