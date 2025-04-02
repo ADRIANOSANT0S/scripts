@@ -28,12 +28,8 @@ check_github_account() {
   fi
 }
 
-# Check if `jq` is installed
-if ! command -v jq &> /dev/null; then
-  echo "The 'jq' package is required but not installed."
-  echo "Please install it and run the script again."
-  exit 1
-fi
+# Check if `jq` is installed (removed dependency on jq)
+# If you need to fetch information from GitHub API, use `grep`/`awk` instead
 
 # Ask the repository visibility
 echo "Choose the visibility of the repository: ('public' as default or 'private')"
@@ -50,8 +46,8 @@ check_github_login
 # Check if the user wants to change the GitHub account
 check_github_account
 
-# Get the GitHub username
-username=$(gh api user | jq -r .login)
+# Get the GitHub username without jq (using `gh api` and `grep`)
+username=$(gh api /user | grep -oP '"login":\s*"\K([^"]+)')
 
 echo "If your remote repository has a prefix (e.g. 'github.com-prefixname/repo-name/repo-name.git'), enter it now:"
 read prefix_remoto
